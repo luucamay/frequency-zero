@@ -34,3 +34,12 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# aistudio
+node_modules/
+.next/
+coverage/
+.DS_Store
+*.log
+.env*
+!.env.example

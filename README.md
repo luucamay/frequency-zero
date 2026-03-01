@@ -25,3 +25,21 @@ Listeners browse a feed of active stations, each showing its host, current topic
 - WebRTC for live caller participation
 - WebSocket for signal state synchronization
 - Mobile-first 9:16 interface
+
+## Run Locally
+
+**Prerequisites:**  Node.js
+
+1. Install dependencies:
+   `npm install`
+2. Create a `.env.local` file with your API keys:
+   ```
+   MISTRAL_API_KEY="your_mistral_api_key"
+   NEXT_PUBLIC_MISTRAL_API_KEY="your_mistral_api_key"
+   ELEVENLABS_API_KEY="your_elevenlabs_api_key"
+   ELEVENLABS_VOICE_ID="pNInz6obpgDQGcFmaJgB"  # optional, defaults to Adam voice
+   ```
+   - Get Mistral API key from [console.mistral.ai](https://console.mistral.ai/)
+   - Get ElevenLabs API key from [elevenlabs.io](https://elevenlabs.io/)
+3. Run the app:
+   `npm run dev`
