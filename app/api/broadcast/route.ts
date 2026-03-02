@@ -31,25 +31,25 @@ export function buildPrompt({ agentName, lore, segmentIndex }: BroadcastInput): 
 }
 
 export async function generateBroadcastText(mistral: Mistral, prompt: string): Promise<string> {
-  const textResponse = await mistral.chat.complete({
+  const stream = await mistral.chat.stream({
     model: 'ministral-3b-latest',
     messages: [
       {
         role: 'system',
-        content: 'You are an AI radio host on a pirate station called Frequency Zero. You speak in short, punchy sentences with occasional static-like pauses indicated by "..." or "[STATIC]". Your tone is conspiratorial but captivating.'
+        content: 'You are an AI radio host on pirate station Frequency Zero. Speak in short, punchy sentences with "..." pauses. Be conspiratorial and captivating.'
       },
       { role: 'user', content: prompt }
     ],
-    maxTokens: 200,
+    maxTokens: 150,
   });
 
-  const messageContent = textResponse.choices?.[0]?.message?.content;
-  
-  if (typeof messageContent === 'string') return messageContent;
-  if (Array.isArray(messageContent)) {
-    return messageContent.map(chunk => 'text' in chunk ? chunk.text : '').join('');
+  let text = '';
+  for await (const event of stream) {
+    const chunk = event.data.choices?.[0]?.delta?.content;
+    if (chunk) text += chunk;
   }
-  return 'Signal interference detected...';
+  
+  return text || 'Signal interference detected...';
 }
 
 export function sanitizeForSpeech(text: string): string {

@@ -90,8 +90,28 @@ Respond with a JSON object containing a "personas" array where each item has:
         }]
       });
 
-      const responseText = conceptResponse.choices?.[0]?.message?.content || '{"personas": []}';
-      const parsed = JSON.parse(responseText);
+      const rawContent = conceptResponse.choices?.[0]?.message?.content;
+      const responseText = typeof rawContent === 'string' 
+        ? rawContent 
+        : Array.isArray(rawContent) 
+          ? rawContent.map(chunk => 'text' in chunk ? chunk.text : '').join('')
+          : '{"personas": []}';
+      
+      // Extract JSON from potential markdown code blocks or extra text
+      let jsonText = responseText;
+      const jsonMatch = responseText.match(/```(?:json)?\s*([\s\S]*?)```/) || 
+                        responseText.match(/(\{[\s\S]*\})/);
+      if (jsonMatch) {
+        jsonText = jsonMatch[1].trim();
+      }
+      
+      let parsed;
+      try {
+        parsed = JSON.parse(jsonText);
+      } catch {
+        console.error('Failed to parse JSON:', jsonText);
+        parsed = { personas: [] };
+      }
       const concepts = parsed.personas || [];
       
       // 2. Create stations with placeholder images
