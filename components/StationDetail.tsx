@@ -4,8 +4,9 @@ import { useState, useEffect } from 'react';
 import { Station } from '@/app/page';
 import { motion } from 'motion/react';
 import Image from 'next/image';
-import { X, BatteryCharging, MessageSquare, Phone, Radio, Activity, Volume2, VolumeX, Loader2, Play, Pause } from 'lucide-react';
+import { X, BatteryCharging, MessageSquare, Phone, Radio, Activity, Volume2, VolumeX, Play } from 'lucide-react';
 import { useBroadcast } from '@/hooks/use-broadcast';
+import { PaymentModal, PaymentAction } from './PaymentModal';
 
 interface StationDetailProps {
   station: Station;
@@ -18,6 +19,8 @@ export function StationDetail({ station, onClose, onFuel, onInject }: StationDet
   const [injectMessage, setInjectMessage] = useState('');
   const [isInjecting, setIsInjecting] = useState(false);
   const [isCalling, setIsCalling] = useState(false);
+  const [paymentAction, setPaymentAction] = useState<PaymentAction | null>(null);
+  const [pendingInjectMessage, setPendingInjectMessage] = useState('');
   const [waveformData] = useState(() => 
     [...Array(32)].map(() => ({
       heights: [`${Math.random() * 100}%`, `${Math.random() * 100}%`, `${Math.random() * 100}%`],
@@ -52,20 +55,47 @@ export function StationDetail({ station, onClose, onFuel, onInject }: StationDet
     e.preventDefault();
     if (!injectMessage.trim()) return;
     
-    setIsInjecting(true);
-    onInject(injectMessage);
-    
-    setTimeout(() => {
-      setIsInjecting(false);
-      setInjectMessage('');
-    }, 1500);
+    setPendingInjectMessage(injectMessage);
+    setPaymentAction('inject');
   };
 
-  const handleCall = () => {
-    setIsCalling(true);
-    setTimeout(() => {
-      setIsCalling(false);
-    }, 5000); // Mock call duration
+  const handleFuelClick = () => {
+    setPaymentAction('fuel');
+  };
+
+  const handleCallClick = () => {
+    setPaymentAction('call');
+  };
+
+  const handleClaimClick = () => {
+    setPaymentAction('claim');
+  };
+
+  const handlePaymentConfirm = () => {
+    if (paymentAction === 'fuel') {
+      onFuel();
+    } else if (paymentAction === 'inject') {
+      setIsInjecting(true);
+      onInject(pendingInjectMessage);
+      setTimeout(() => {
+        setIsInjecting(false);
+        setInjectMessage('');
+        setPendingInjectMessage('');
+      }, 1500);
+    } else if (paymentAction === 'call') {
+      setIsCalling(true);
+      setTimeout(() => {
+        setIsCalling(false);
+      }, 5000);
+    } else if (paymentAction === 'claim') {
+      // Handle claim action
+    }
+    setPaymentAction(null);
+  };
+
+  const handlePaymentCancel = () => {
+    setPaymentAction(null);
+    setPendingInjectMessage('');
   };
 
   return (
@@ -88,32 +118,17 @@ export function StationDetail({ station, onClose, onFuel, onInject }: StationDet
           <div className="flex items-center gap-2">
             {/* Audio Controls */}
             {!isStatic && (
-              <>
-                <button
-                  onClick={() => broadcast.isPlaying ? broadcast.pause() : broadcast.play()}
-                  className="p-2 bg-black/50 hover:bg-red-500/20 rounded-full border border-white/10 transition-colors"
-                  title={broadcast.isPlaying ? 'Pause' : 'Play'}
-                >
-                  {broadcast.isLoading ? (
-                    <Loader2 className="w-5 h-5 text-red-500 animate-spin" />
-                  ) : broadcast.isPlaying ? (
-                    <Pause className="w-5 h-5 text-red-500" />
-                  ) : (
-                    <Play className="w-5 h-5 text-zinc-300" />
-                  )}
-                </button>
-                <button
-                  onClick={() => broadcast.toggleMute()}
-                  className="p-2 bg-black/50 hover:bg-red-500/20 rounded-full border border-white/10 transition-colors"
-                  title={broadcast.isMuted ? 'Unmute' : 'Mute'}
-                >
-                  {broadcast.isMuted ? (
-                    <VolumeX className="w-5 h-5 text-zinc-500" />
-                  ) : (
-                    <Volume2 className="w-5 h-5 text-red-500" />
-                  )}
-                </button>
-              </>
+              <button
+                onClick={() => broadcast.toggleMute()}
+                className="p-2 bg-black/50 hover:bg-red-500/20 rounded-full border border-white/10 transition-colors"
+                title={broadcast.isMuted ? 'Unmute' : 'Mute'}
+              >
+                {broadcast.isMuted ? (
+                  <VolumeX className="w-5 h-5 text-zinc-500" />
+                ) : (
+                  <Volume2 className="w-5 h-5 text-red-500" />
+                )}
+              </button>
             )}
             <button 
               onClick={onClose}
@@ -123,22 +138,6 @@ export function StationDetail({ station, onClose, onFuel, onInject }: StationDet
             </button>
           </div>
         </div>
-
-        {/* Live Transcript */}
-        {!isStatic && broadcast.currentText && (
-          <div className="absolute top-20 left-4 right-4 z-20 max-h-24 overflow-hidden">
-            <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              key={broadcast.segmentIndex}
-              className="bg-black/70 backdrop-blur-sm border border-red-900/30 rounded-lg p-3"
-            >
-              <p className="text-xs text-zinc-300 font-mono leading-relaxed line-clamp-3">
-                &gt; {broadcast.currentText}
-              </p>
-            </motion.div>
-          </div>
-        )}
 
         {/* Broadcast Error/Click to Play */}
         {!isStatic && broadcast.error && (
@@ -182,7 +181,7 @@ export function StationDetail({ station, onClose, onFuel, onInject }: StationDet
             </div>
           </div>
 
-          {/* Agent Info */}
+          {/* Topic Info */}
           <div className="absolute bottom-0 left-0 w-full p-6 z-20">
             <h2 className="font-mono text-3xl font-bold text-zinc-100 uppercase tracking-tighter mb-2">
               {station.agentName}
@@ -216,7 +215,7 @@ export function StationDetail({ station, onClose, onFuel, onInject }: StationDet
           
           {/* Fuel Button */}
           <button 
-            onClick={onFuel}
+            onClick={handleFuelClick}
             disabled={isStatic}
             className="w-full flex items-center justify-between p-4 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed group"
           >
@@ -263,7 +262,7 @@ export function StationDetail({ station, onClose, onFuel, onInject }: StationDet
 
           {/* Call Button */}
           <button 
-            onClick={handleCall}
+            onClick={handleCallClick}
             disabled={isStatic || isCalling}
             className={`w-full flex items-center justify-between p-4 border rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed ${isCalling ? 'bg-red-900/20 border-red-500/50' : 'bg-zinc-900 hover:bg-zinc-800 border-zinc-800'}`}
           >
@@ -283,6 +282,7 @@ export function StationDetail({ station, onClose, onFuel, onInject }: StationDet
 
           {/* Claim Button */}
           <button 
+            onClick={handleClaimClick}
             disabled={isStatic}
             className="w-full py-4 mt-2 bg-transparent border border-zinc-800 hover:border-zinc-600 text-zinc-400 hover:text-zinc-200 font-mono text-xs font-bold tracking-widest uppercase rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
@@ -309,6 +309,17 @@ export function StationDetail({ station, onClose, onFuel, onInject }: StationDet
           </div>
         )}
       </div>
+
+      {/* Payment Modal */}
+      {paymentAction && (
+        <PaymentModal
+          action={paymentAction}
+          stationName={station.agentName}
+          injectMessage={paymentAction === 'inject' ? pendingInjectMessage : undefined}
+          onConfirm={handlePaymentConfirm}
+          onCancel={handlePaymentCancel}
+        />
+      )}
     </motion.div>
   );
 }

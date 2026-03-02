@@ -32,28 +32,23 @@ export function useBroadcast({ agentName, lore, autoPlay = true }: UseBroadcastO
   const prefetchingRef = useRef<Set<number>>(new Set());
 
   const fetchSegment = useCallback(async (index: number): Promise<{ audioUrl: string; text: string } | null> => {
-    console.log('[BROADCAST] fetchSegment called, index:', index);
     try {
       const response = await fetch('/api/broadcast', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ agentName, lore, segmentIndex: index }),
       });
-
-      console.log('[BROADCAST] API response status:', response.status);
       
       if (!response.ok) {
         throw new Error('Broadcast request failed');
       }
 
       const audioBlob = await response.blob();
-      console.log('[BROADCAST] Audio blob size:', audioBlob.size);
       const audioUrl = URL.createObjectURL(audioBlob);
       const text = decodeURIComponent(response.headers.get('X-Broadcast-Text') || '');
       
       return { audioUrl, text };
-    } catch (err) {
-      console.error('[BROADCAST] Failed to fetch segment:', err);
+    } catch {
       return null;
     }
   }, [agentName, lore]);
@@ -62,12 +57,10 @@ export function useBroadcast({ agentName, lore, autoPlay = true }: UseBroadcastO
   const prefetchSegment = useCallback(async (index: number) => {
     // Skip if already cached or being fetched
     if (cacheRef.current.has(index) || prefetchingRef.current.has(index)) {
-      console.log('[PREFETCH] Skipping index', index, '- already cached or fetching');
       return;
     }
 
     prefetchingRef.current.add(index);
-    console.log('[PREFETCH] Starting prefetch for segment', index);
     
     const segment = await fetchSegment(index);
     
@@ -75,15 +68,11 @@ export function useBroadcast({ agentName, lore, autoPlay = true }: UseBroadcastO
     
     if (segment && isActiveRef.current) {
       cacheRef.current.set(index, { ...segment, index });
-      console.log('[PREFETCH] Cached segment', index);
     }
   }, [fetchSegment]);
 
   const playNextSegment = useCallback(async () => {
-    console.log('[BROADCAST] playNextSegment called, isActive:', isActiveRef.current, 'isProcessing:', isProcessingRef.current);
-    
     if (!isActiveRef.current || isProcessingRef.current) {
-      console.log('[BROADCAST] Skipping - already processing or inactive');
       return;
     }
     
@@ -94,11 +83,9 @@ export function useBroadcast({ agentName, lore, autoPlay = true }: UseBroadcastO
     let segment = cacheRef.current.get(segmentIndex);
     
     if (segment) {
-      console.log('[BROADCAST] Using cached segment', segmentIndex);
       cacheRef.current.delete(segmentIndex);
     } else {
       setIsLoading(true);
-      console.log('[BROADCAST] Fetching segment', segmentIndex);
       const fetched = await fetchSegment(segmentIndex);
       if (fetched) {
         segment = { ...fetched, index: segmentIndex };
@@ -106,7 +93,6 @@ export function useBroadcast({ agentName, lore, autoPlay = true }: UseBroadcastO
     }
     
     if (!segment || !isActiveRef.current) {
-      console.log('[BROADCAST] No segment or inactive, bailing out');
       isProcessingRef.current = false;
       setIsLoading(false);
       return;
@@ -129,9 +115,7 @@ export function useBroadcast({ agentName, lore, autoPlay = true }: UseBroadcastO
     audio.muted = isMuted;
     audio.volume = volume;
 
-    console.log('[BROADCAST] Audio created, muted:', isMuted, 'volume:', volume);
     audio.onplay = () => {
-      console.log('[BROADCAST] Audio started playing');
       setIsPlaying(true);
     };
     audio.onpause = () => setIsPlaying(false);
@@ -148,11 +132,8 @@ export function useBroadcast({ agentName, lore, autoPlay = true }: UseBroadcastO
     };
 
     try {
-      console.log('[BROADCAST] Attempting to play audio...');
       await audio.play();
-      console.log('[BROADCAST] Audio play() succeeded');
-    } catch (err) {
-      console.error('[BROADCAST] Playback error:', err);
+    } catch {
       setError('Click to start broadcast');
       isProcessingRef.current = false;
     }
@@ -162,7 +143,6 @@ export function useBroadcast({ agentName, lore, autoPlay = true }: UseBroadcastO
   useEffect(() => {
     // Reset to active on mount (handles React Strict Mode double-mount)
     isActiveRef.current = true;
-    console.log('[BROADCAST] Mount effect - setting isActive to true, autoPlay:', autoPlay);
     
     // Capture refs for cleanup
     const cache = cacheRef.current;
@@ -170,12 +150,10 @@ export function useBroadcast({ agentName, lore, autoPlay = true }: UseBroadcastO
     
     // Auto-start playback on mount if autoPlay is enabled
     if (autoPlay) {
-      console.log('[BROADCAST] Starting autoplay on mount');
       playNextSegment();
     }
     
     return () => {
-      console.log('[BROADCAST] Cleanup effect - setting isActive to false');
       isActiveRef.current = false;
       if (audio) {
         audio.pause();
@@ -192,15 +170,13 @@ export function useBroadcast({ agentName, lore, autoPlay = true }: UseBroadcastO
   useEffect(() => {
     // Skip initial mount (handled above) - only trigger on segment changes
     if (segmentIndex > 0 && autoPlay && isActiveRef.current) {
-      console.log('[BROADCAST] Segment changed to', segmentIndex, '- playing next');
       playNextSegment();
     }
   }, [segmentIndex, autoPlay, playNextSegment]);
 
   const play = useCallback(() => {
-    console.log('[BROADCAST] play() called, audioRef:', !!audioRef.current, 'paused:', audioRef.current?.paused, 'isProcessing:', isProcessingRef.current);
     if (audioRef.current && audioRef.current.paused) {
-      audioRef.current.play().catch(console.error);
+      audioRef.current.play().catch(() => {});
     } else if (!isProcessingRef.current) {
       playNextSegment();
     }
@@ -218,7 +194,6 @@ export function useBroadcast({ agentName, lore, autoPlay = true }: UseBroadcastO
       if (audioRef.current) {
         audioRef.current.muted = newMuted;
       }
-      console.log('[BROADCAST] Mute toggled:', newMuted);
       return newMuted;
     });
   }, []);
