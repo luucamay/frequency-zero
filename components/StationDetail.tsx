@@ -18,7 +18,6 @@ export function StationDetail({ station, onClose, onFuel, onInject }: StationDet
   const [injectMessage, setInjectMessage] = useState('');
   const [isInjecting, setIsInjecting] = useState(false);
   const [isCalling, setIsCalling] = useState(false);
-  const [isMuted, setIsMuted] = useState(false);
   const [waveformData] = useState(() => 
     [...Array(32)].map(() => ({
       heights: [`${Math.random() * 100}%`, `${Math.random() * 100}%`, `${Math.random() * 100}%`],
@@ -104,11 +103,11 @@ export function StationDetail({ station, onClose, onFuel, onInject }: StationDet
                   )}
                 </button>
                 <button
-                  onClick={() => setIsMuted(!isMuted)}
+                  onClick={() => broadcast.toggleMute()}
                   className="p-2 bg-black/50 hover:bg-red-500/20 rounded-full border border-white/10 transition-colors"
-                  title={isMuted ? 'Unmute' : 'Mute'}
+                  title={broadcast.isMuted ? 'Unmute' : 'Mute'}
                 >
-                  {isMuted ? (
+                  {broadcast.isMuted ? (
                     <VolumeX className="w-5 h-5 text-zinc-500" />
                   ) : (
                     <Volume2 className="w-5 h-5 text-red-500" />
