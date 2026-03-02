@@ -2,6 +2,11 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react';
 
+export interface Injection {
+  userName: string;
+  content: string;
+}
+
 interface UseBroadcastOptions {
   agentName: string;
   lore: string;
@@ -30,13 +35,17 @@ export function useBroadcast({ agentName, lore, autoPlay = true }: UseBroadcastO
   // Pre-caching refs
   const cacheRef = useRef<Map<number, CachedSegment>>(new Map());
   const prefetchingRef = useRef<Set<number>>(new Set());
+  
+  // Injection queue
+  const injectionQueueRef = useRef<Injection[]>([]);
+  const [pendingInjections, setPendingInjections] = useState(0);
 
-  const fetchSegment = useCallback(async (index: number): Promise<{ audioUrl: string; text: string } | null> => {
+  const fetchSegment = useCallback(async (index: number, injection?: Injection): Promise<{ audioUrl: string; text: string } | null> => {
     try {
       const response = await fetch('/api/broadcast', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ agentName, lore, segmentIndex: index }),
+        body: JSON.stringify({ agentName, lore, segmentIndex: index, injection }),
       });
       
       if (!response.ok) {
@@ -78,15 +87,21 @@ export function useBroadcast({ agentName, lore, autoPlay = true }: UseBroadcastO
     
     isProcessingRef.current = true;
     setError(null);
+    
+    // Check for pending injection
+    const injection = injectionQueueRef.current.shift();
+    if (injection) {
+      setPendingInjections(injectionQueueRef.current.length);
+    }
 
-    // Check cache first
-    let segment = cacheRef.current.get(segmentIndex);
+    // Check cache first (but skip cache if we have an injection to process)
+    let segment = injection ? undefined : cacheRef.current.get(segmentIndex);
     
     if (segment) {
       cacheRef.current.delete(segmentIndex);
     } else {
       setIsLoading(true);
-      const fetched = await fetchSegment(segmentIndex);
+      const fetched = await fetchSegment(segmentIndex, injection);
       if (fetched) {
         segment = { ...fetched, index: segmentIndex };
       }
@@ -227,7 +242,15 @@ export function useBroadcast({ agentName, lore, autoPlay = true }: UseBroadcastO
     setSegmentIndex(0);
     setCurrentText('');
     setError(null);
+    injectionQueueRef.current = [];
+    setPendingInjections(0);
   }, [stop]);
+
+  // Queue an injection to be read in the next segment
+  const queueInjection = useCallback((injection: Injection) => {
+    injectionQueueRef.current.push(injection);
+    setPendingInjections(injectionQueueRef.current.length);
+  }, []);
 
   return {
     isPlaying,
@@ -237,11 +260,13 @@ export function useBroadcast({ agentName, lore, autoPlay = true }: UseBroadcastO
     segmentIndex,
     isMuted,
     volume,
+    pendingInjections,
     play,
     pause,
     stop,
     restart,
     toggleMute,
     setVolume: setAudioVolume,
+    queueInjection,
   };
 }

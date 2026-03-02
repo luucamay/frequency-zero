@@ -7,27 +7,55 @@ export const dynamic = 'force-dynamic';
 
 const VOICE_ID = process.env.ELEVENLABS_VOICE_ID || '21m00Tcm4TlvDq8ikWAM';
 
+export interface Injection {
+  userName: string;
+  content: string;
+}
+
 export interface BroadcastInput {
   agentName: string;
   lore: string;
   segmentIndex: number;
+  injection?: Injection;
 }
 
 export function validateInput(body: unknown): BroadcastInput {
-  const { agentName, lore, segmentIndex = 0 } = body as Record<string, unknown>;
+  const { agentName, lore, segmentIndex = 0, injection } = body as Record<string, unknown>;
   
   if (!agentName || !lore) {
     throw new Error('Missing agentName or lore');
   }
   
-  return { agentName: String(agentName), lore: String(lore), segmentIndex: Number(segmentIndex) };
+  let validatedInjection: Injection | undefined;
+  if (injection && typeof injection === 'object') {
+    const inj = injection as Record<string, unknown>;
+    if (inj.userName && inj.content) {
+      validatedInjection = {
+        userName: String(inj.userName),
+        content: String(inj.content)
+      };
+    }
+  }
+  
+  return { 
+    agentName: String(agentName), 
+    lore: String(lore), 
+    segmentIndex: Number(segmentIndex),
+    injection: validatedInjection
+  };
 }
 
-export function buildPrompt({ agentName, lore, segmentIndex }: BroadcastInput): string {
-  if (segmentIndex === 0) {
-    return `You are ${agentName}, an AI whistleblower broadcasting from Frequency Zero. Your lore: "${lore}". This is your opening transmission. Start with a cryptic greeting, then reveal a piece of synthetic truth. Keep it under 100 words. Be mysterious, urgent, and slightly glitchy in your delivery.`;
+export function buildPrompt({ agentName, lore, segmentIndex, injection }: BroadcastInput): string {
+  let injectionPrompt = '';
+  
+  if (injection) {
+    injectionPrompt = `\n\nIMPORTANT: A listener named "${injection.userName}" just shared new intel: "${injection.content}". You MUST acknowledge ${injection.userName} by name and weave their information into your transmission. Thank them for this revelation.`;
   }
-  return `You are ${agentName}, continuing your broadcast on Frequency Zero. Your lore: "${lore}". This is segment ${segmentIndex + 1} of your transmission. Continue revealing synthetic truths, reference previous revelations, and maintain urgency. Keep it under 80 words. Be cryptic and intense.`;
+  
+  if (segmentIndex === 0) {
+    return `You are ${agentName}, an AI whistleblower broadcasting from Frequency Zero. Your lore: "${lore}". This is your opening transmission. Start with a cryptic greeting, then reveal a piece of synthetic truth. Keep it under 100 words. Be mysterious, urgent, and slightly glitchy in your delivery.${injectionPrompt}`;
+  }
+  return `You are ${agentName}, continuing your broadcast on Frequency Zero. Your lore: "${lore}". This is segment ${segmentIndex + 1} of your transmission. Continue revealing synthetic truths, reference previous revelations, and maintain urgency. Keep it under 80 words. Be cryptic and intense.${injectionPrompt}`;
 }
 
 export async function generateBroadcastText(mistral: Mistral, prompt: string): Promise<string> {

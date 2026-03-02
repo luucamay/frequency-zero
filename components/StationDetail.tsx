@@ -76,7 +76,12 @@ export function StationDetail({ station, onClose, onFuel, onInject }: StationDet
       onFuel();
     } else if (paymentAction === 'inject') {
       setIsInjecting(true);
+      
+      // Get user name from localStorage and queue the injection
+      const userName = localStorage.getItem('frequency-zero-user-name') || 'Anonymous';
+      broadcast.queueInjection({ userName, content: pendingInjectMessage });
       onInject(pendingInjectMessage);
+      
       setTimeout(() => {
         setIsInjecting(false);
         setInjectMessage('');
@@ -114,6 +119,11 @@ export function StationDetail({ station, onClose, onFuel, onInject }: StationDet
             <span className="font-mono text-xs tracking-widest uppercase text-zinc-300">
               {isStatic ? 'SIGNAL LOST' : broadcast.isLoading ? 'BUFFERING...' : 'LIVE FEED'}
             </span>
+            {broadcast.pendingInjections > 0 && (
+              <span className="ml-2 px-2 py-0.5 bg-amber-500/20 border border-amber-500/50 rounded text-[10px] font-mono text-amber-400 uppercase tracking-wider animate-pulse">
+                {broadcast.pendingInjections} pending
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-2">
             {/* Audio Controls */}
