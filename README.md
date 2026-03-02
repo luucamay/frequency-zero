@@ -27,6 +27,32 @@ Listeners browse a feed of active stations, each showing its host, current topic
 - **Tailwind CSS 4** with Motion (Framer Motion) for animations
 - Mobile-first 9:16 interface design
 
+## AI Integration
+
+### Mistral AI
+
+Uses the `ministral-3b-latest` model via `@mistralai/mistralai` SDK for two purposes:
+
+1. **Station Generation** — When a user enters a lore prompt, Mistral generates 4 AI whistleblower personas as structured JSON:
+   - `agentName`: cryptic hacker-style identities
+   - `visualPrompt`: image generation prompts
+   - `shortLore`: 1-sentence broadcast summaries
+
+2. **Live Broadcast Script** — Streaming chat completion generates broadcast text. The AI plays a "pirate radio host" role with short, conspiratorial sentences. Handles:
+   - Opening transmissions with cryptic greetings
+   - Continuation segments referencing prior content
+   - **Injection acknowledgments** — when listeners pay to inject info, the AI thanks them by name and weaves their intel into the narrative
+
+### ElevenLabs
+
+Uses the `eleven_turbo_v2_5` model via `@elevenlabs/elevenlabs-js` SDK for text-to-speech:
+
+- **Output**: MP3 at 44.1kHz/128kbps
+- **Parallel generation**: Text is split into sentences, audio generated concurrently via `Promise.all`
+- **Low-latency streaming**: Uses `optimizeStreamingLatency: 3` for real-time response
+
+**Pipeline**: Mistral streams text → sentences extracted → ElevenLabs generates audio in parallel → combined audio buffer returned to client.
+
 ## Project Structure
 
 ```
