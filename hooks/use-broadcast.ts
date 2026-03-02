@@ -8,6 +8,12 @@ interface UseBroadcastOptions {
   autoPlay?: boolean;
 }
 
+interface CachedSegment {
+  audioUrl: string;
+  text: string;
+  index: number;
+}
+
 export function useBroadcast({ agentName, lore, autoPlay = true }: UseBroadcastOptions) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -19,8 +25,11 @@ export function useBroadcast({ agentName, lore, autoPlay = true }: UseBroadcastO
   
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const isActiveRef = useRef(true);
-  const audioQueueRef = useRef<string[]>([]);
   const isProcessingRef = useRef(false);
+  
+  // Pre-caching refs
+  const cacheRef = useRef<Map<number, CachedSegment>>(new Map());
+  const prefetchingRef = useRef<Set<number>>(new Set());
 
   const fetchSegment = useCallback(async (index: number): Promise<{ audioUrl: string; text: string } | null> => {
     console.log('[BROADCAST] fetchSegment called, index:', index);
@@ -49,6 +58,27 @@ export function useBroadcast({ agentName, lore, autoPlay = true }: UseBroadcastO
     }
   }, [agentName, lore]);
 
+  // Prefetch next segment in background
+  const prefetchSegment = useCallback(async (index: number) => {
+    // Skip if already cached or being fetched
+    if (cacheRef.current.has(index) || prefetchingRef.current.has(index)) {
+      console.log('[PREFETCH] Skipping index', index, '- already cached or fetching');
+      return;
+    }
+
+    prefetchingRef.current.add(index);
+    console.log('[PREFETCH] Starting prefetch for segment', index);
+    
+    const segment = await fetchSegment(index);
+    
+    prefetchingRef.current.delete(index);
+    
+    if (segment && isActiveRef.current) {
+      cacheRef.current.set(index, { ...segment, index });
+      console.log('[PREFETCH] Cached segment', index);
+    }
+  }, [fetchSegment]);
+
   const playNextSegment = useCallback(async () => {
     console.log('[BROADCAST] playNextSegment called, isActive:', isActiveRef.current, 'isProcessing:', isProcessingRef.current);
     
@@ -58,11 +88,22 @@ export function useBroadcast({ agentName, lore, autoPlay = true }: UseBroadcastO
     }
     
     isProcessingRef.current = true;
-    setIsLoading(true);
     setError(null);
 
-    console.log('[BROADCAST] Fetching segment', segmentIndex);
-    const segment = await fetchSegment(segmentIndex);
+    // Check cache first
+    let segment = cacheRef.current.get(segmentIndex);
+    
+    if (segment) {
+      console.log('[BROADCAST] Using cached segment', segmentIndex);
+      cacheRef.current.delete(segmentIndex);
+    } else {
+      setIsLoading(true);
+      console.log('[BROADCAST] Fetching segment', segmentIndex);
+      const fetched = await fetchSegment(segmentIndex);
+      if (fetched) {
+        segment = { ...fetched, index: segmentIndex };
+      }
+    }
     
     if (!segment || !isActiveRef.current) {
       console.log('[BROADCAST] No segment or inactive, bailing out');
@@ -73,6 +114,9 @@ export function useBroadcast({ agentName, lore, autoPlay = true }: UseBroadcastO
 
     setCurrentText(segment.text);
     setIsLoading(false);
+
+    // Start prefetching next segment immediately
+    prefetchSegment(segmentIndex + 1);
 
     // Create and play audio
     if (audioRef.current) {
@@ -112,13 +156,17 @@ export function useBroadcast({ agentName, lore, autoPlay = true }: UseBroadcastO
       setError('Click to start broadcast');
       isProcessingRef.current = false;
     }
-  }, [segmentIndex, fetchSegment, isMuted, volume]);
+  }, [segmentIndex, fetchSegment, isMuted, volume, prefetchSegment]);
 
   // Mount/unmount lifecycle
   useEffect(() => {
     // Reset to active on mount (handles React Strict Mode double-mount)
     isActiveRef.current = true;
     console.log('[BROADCAST] Mount effect - setting isActive to true, autoPlay:', autoPlay);
+    
+    // Capture refs for cleanup
+    const cache = cacheRef.current;
+    const audio = audioRef.current;
     
     // Auto-start playback on mount if autoPlay is enabled
     if (autoPlay) {
@@ -129,10 +177,13 @@ export function useBroadcast({ agentName, lore, autoPlay = true }: UseBroadcastO
     return () => {
       console.log('[BROADCAST] Cleanup effect - setting isActive to false');
       isActiveRef.current = false;
-      if (audioRef.current) {
-        audioRef.current.pause();
-        URL.revokeObjectURL(audioRef.current.src);
+      if (audio) {
+        audio.pause();
+        URL.revokeObjectURL(audio.src);
       }
+      // Clear cache on unmount
+      cache.forEach(segment => URL.revokeObjectURL(segment.audioUrl));
+      cache.clear();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Only run on mount/unmount
@@ -187,6 +238,10 @@ export function useBroadcast({ agentName, lore, autoPlay = true }: UseBroadcastO
       URL.revokeObjectURL(audioRef.current.src);
       audioRef.current = null;
     }
+    // Clear cache
+    cacheRef.current.forEach(segment => URL.revokeObjectURL(segment.audioUrl));
+    cacheRef.current.clear();
+    prefetchingRef.current.clear();
     setIsPlaying(false);
     setIsLoading(false);
   }, []);
