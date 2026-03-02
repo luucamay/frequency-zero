@@ -21,25 +21,76 @@ Listeners browse a feed of active stations, each showing its host, current topic
 
 ## Tech Stack
 
-- Real-time AI voice generation (ElevenLabs)
-- WebRTC for live caller participation
-- WebSocket for signal state synchronization
-- Mobile-first 9:16 interface
+- **Next.js 15** with React 19 and TypeScript
+- **Mistral AI** for generating station concepts and broadcast content
+- **ElevenLabs** for real-time AI voice synthesis
+- **Tailwind CSS 4** with Motion (Framer Motion) for animations
+- Mobile-first 9:16 interface design
 
-## Run Locally
+## Project Structure
 
-**Prerequisites:**  Node.js
+```
+app/
+├── page.tsx              # Main station grid and generation logic
+├── layout.tsx            # Root layout with metadata
+├── api/
+│   ├── broadcast/        # Text-to-speech broadcast API
+│   └── call/             # Live caller WebRTC handler
+├── test-payment/         # Payment flow testing page
+└── test-station/         # Station testing page
+
+components/
+├── Hero.tsx              # Landing hero with lore input
+├── StationGrid.tsx       # Grid of active stations
+├── StationCard.tsx       # Individual station card
+├── StationDetail.tsx     # Full station view with audio
+├── CallModal.tsx         # Live call interface
+└── PaymentModal.tsx      # Micropayment modal
+
+hooks/
+├── use-broadcast.ts      # Audio broadcast state management
+├── use-call-mode.ts      # Live call mode handling
+└── use-mobile.ts         # Mobile detection
+```
+
+## Getting Started
+
+**Prerequisites:** Node.js 18+
 
 1. Install dependencies:
-   `npm install`
-2. Create a `.env.local` file with your API keys:
+   ```bash
+   npm install
    ```
+
+2. Create a `.env.local` file with your API keys:
+   ```env
    MISTRAL_API_KEY="your_mistral_api_key"
    NEXT_PUBLIC_MISTRAL_API_KEY="your_mistral_api_key"
    ELEVENLABS_API_KEY="your_elevenlabs_api_key"
-   ELEVENLABS_VOICE_ID="pNInz6obpgDQGcFmaJgB"  # optional, defaults to Adam voice
+   ELEVENLABS_VOICE_ID="pNInz6obpgDQGcFmaJgB"  # optional, defaults to Adam
    ```
-   - Get Mistral API key from [console.mistral.ai](https://console.mistral.ai/)
-   - Get ElevenLabs API key from [elevenlabs.io](https://elevenlabs.io/)
-3. Run the app:
-   `npm run dev`
+
+   - Get a Mistral API key from [console.mistral.ai](https://console.mistral.ai/)
+   - Get an ElevenLabs API key from [elevenlabs.io](https://elevenlabs.io/)
+
+3. Run the development server:
+   ```bash
+   npm run dev
+   ```
+
+4. Open [http://localhost:3000](http://localhost:3000)
+
+## Scripts
+
+| Command | Description |
+|---------|-------------|
+| `npm run dev` | Start development server |
+| `npm run build` | Build for production |
+| `npm run start` | Start production server |
+| `npm run lint` | Run ESLint |
+| `npm run test` | Run tests in watch mode |
+| `npm run test:run` | Run tests once |
+
+## License
+
+See [LICENSE](LICENSE) for details.
