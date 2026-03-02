@@ -1,0 +1,9 @@
+{
+	"servers": {
+		"elevenlabs-mcp": {
+			"url": "https://elevenlabs.io/_mcp/server",
+			"type": "http"
+		}
+	},
+	"inputs": []
+}

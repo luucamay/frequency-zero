@@ -52,14 +52,38 @@ export async function generateBroadcastText(mistral: Mistral, prompt: string): P
   return 'Signal interference detected...';
 }
 
+export function sanitizeForSpeech(text: string): string {
+  return text
+    // Remove markdown bold/italic markers
+    .replace(/\*\*([^*]+)\*\*/g, '$1')  // **bold** -> bold
+    .replace(/\*([^*]+)\*/g, '$1')       // *italic* -> italic
+    .replace(/_([^_]+)_/g, '$1')         // _italic_ -> italic
+    // Remove bracketed stage directions but keep the content readable
+    .replace(/\[STATIC\]/gi, '...')
+    .replace(/\[BEEP\]/gi, '...')
+    .replace(/\[SCREECH\]/gi, '...')
+    .replace(/\[PAUSE\]/gi, '...')
+    .replace(/\[([^\]]+)\]/g, '')        // Remove other [brackets]
+    // Clean up quotes and special chars
+    .replace(/["'"]/g, '')               // Remove various quote styles
+    // Clean up excessive punctuation
+    .replace(/\.{4,}/g, '...')           // Limit ... to three dots
+    .replace(/\s+/g, ' ')                // Normalize whitespace
+    .trim();
+}
+
 export async function generateAudio(elevenlabs: ElevenLabsClient, text: string): Promise<Buffer> {
-  const audio = await elevenlabs.textToSpeech.convert(VOICE_ID, {
-    text,
-    modelId: 'eleven_monolingual_v1',
+  const cleanText = sanitizeForSpeech(text);
+  console.log('[AUDIO] Sanitized text:', cleanText);
+  
+  const audioStream = await elevenlabs.textToSpeech.stream(VOICE_ID, {
+    text: cleanText,
+    modelId: 'eleven_turbo_v2_5',
     outputFormat: 'mp3_44100_128',
+    optimizeStreamingLatency: 3,
   });
 
-  const reader = audio.getReader();
+  const reader = audioStream.getReader();
   const chunks: Uint8Array[] = [];
   
   while (true) {
@@ -72,7 +96,7 @@ export async function generateAudio(elevenlabs: ElevenLabsClient, text: string):
 }
 
 export function createAudioResponse(audioBuffer: Buffer, broadcastText: string): Response {
-  return new Response(audioBuffer, {
+  return new Response(new Uint8Array(audioBuffer), {
     headers: {
       'Content-Type': 'audio/mpeg',
       'Content-Length': audioBuffer.length.toString(),

@@ -6,6 +6,7 @@ import {
   generateAudio,
   createAudioResponse,
   createErrorResponse,
+  sanitizeForSpeech,
   type BroadcastInput,
 } from './route';
 
@@ -280,5 +281,56 @@ describe('createErrorResponse', () => {
     expect(response400.status).toBe(400);
     expect(response500.status).toBe(500);
     expect(response503.status).toBe(503);
+  });
+});
+
+describe('sanitizeForSpeech', () => {
+  it('removes bold markdown markers', () => {
+    expect(sanitizeForSpeech('**bold text**')).toBe('bold text');
+    expect(sanitizeForSpeech('Hello **world**!')).toBe('Hello world!');
+  });
+
+  it('removes italic markdown markers', () => {
+    expect(sanitizeForSpeech('*italic text*')).toBe('italic text');
+    expect(sanitizeForSpeech('_underline italic_')).toBe('underline italic');
+  });
+
+  it('replaces [STATIC] with ellipsis', () => {
+    expect(sanitizeForSpeech('[STATIC] Hello')).toBe('... Hello');
+    expect(sanitizeForSpeech('Hello [static] world')).toBe('Hello ... world');
+  });
+
+  it('replaces [BEEP] and [SCREECH] with ellipsis', () => {
+    expect(sanitizeForSpeech('[BEEP]')).toBe('...');
+    expect(sanitizeForSpeech('[SCREECH]')).toBe('...');
+  });
+
+  it('removes other bracketed content', () => {
+    expect(sanitizeForSpeech('[Pause] Hello')).toBe('... Hello');
+    expect(sanitizeForSpeech('Test [something] here')).toBe('Test here');
+  });
+
+  it('removes various quote styles', () => {
+    expect(sanitizeForSpeech('"Hello"')).toBe('Hello');
+    expect(sanitizeForSpeech("'World'")).toBe('World');
+    expect(sanitizeForSpeech('"Smart quotes"')).toBe('Smart quotes');
+  });
+
+  it('limits excessive dots', () => {
+    expect(sanitizeForSpeech('Hello..... world')).toBe('Hello... world');
+    expect(sanitizeForSpeech('Test......')).toBe('Test...');
+  });
+
+  it('normalizes whitespace', () => {
+    expect(sanitizeForSpeech('Hello    world')).toBe('Hello world');
+    expect(sanitizeForSpeech('  trim me  ')).toBe('trim me');
+  });
+
+  it('handles complex mixed content', () => {
+    const input = '**[STATIC]** *"Listen close, mortal..."* [BEEP]';
+    const output = sanitizeForSpeech(input);
+    expect(output).not.toContain('*');
+    expect(output).not.toContain('[');
+    expect(output).not.toContain('"');
   });
 });
