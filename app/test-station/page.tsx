@@ -1,10 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { StationDetail } from '@/components/StationDetail';
 import { Station } from '@/app/page';
 
-const mockStations: Station[] = [
+const initialStations: Station[] = [
   {
     id: '1',
     agentName: 'ECHO-7',
@@ -35,14 +35,57 @@ const mockStations: Station[] = [
 ];
 
 export default function TestStationDetailPage() {
+  const [stations, setStations] = useState<Station[]>(initialStations);
   const [selectedStation, setSelectedStation] = useState<Station | null>(null);
 
+  // Timer effect - decrease timeLeft every second
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setStations(prev => prev.map(station => {
+        if (station.status === 'static') return station;
+        
+        const newTimeLeft = Math.max(0, station.timeLeft - 1);
+        const newStability = (newTimeLeft / 300) * 100;
+        
+        return {
+          ...station,
+          timeLeft: newTimeLeft,
+          stability: newStability,
+          status: newTimeLeft === 0 ? 'static' : 'active',
+        };
+      }));
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  // Get current station data from stations array
+  const currentStation = selectedStation 
+    ? stations.find(s => s.id === selectedStation.id) || null
+    : null;
+
   const handleFuel = () => {
-    console.log('Fuel action completed!');
+    if (!currentStation) return;
+    
+    setStations(prev => prev.map(s => {
+      if (s.id === currentStation.id) {
+        const newTime = s.timeLeft + 300; // Add 5 mins (cumulative, no cap)
+        return { 
+          ...s, 
+          timeLeft: newTime, 
+          stability: Math.min((newTime / 300) * 100, 100), 
+          status: 'active' as const
+        };
+      }
+      return s;
+    }));
+    
+    console.log('✅ FUEL: Added 5 minutes to', currentStation.agentName);
   };
 
   const handleInject = (message: string) => {
-    console.log('Inject action completed with message:', message);
+    if (!currentStation) return;
+    console.log('💉 INJECT:', message, 'to', currentStation.agentName);
   };
 
   return (
@@ -51,7 +94,7 @@ export default function TestStationDetailPage() {
       <p className="text-zinc-500 text-sm mb-8">Click a station to open its detail view and test the payment flow.</p>
       
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {mockStations.map((station) => (
+        {stations.map((station) => (
           <button
             key={station.id}
             onClick={() => setSelectedStation(station)}
@@ -69,7 +112,7 @@ export default function TestStationDetailPage() {
             <p className="text-zinc-500 text-sm line-clamp-2">{station.lore}</p>
             <div className="mt-4 flex items-center justify-between">
               <span className="text-xs text-zinc-600 font-mono">
-                Stability: {station.stability}%
+                Stability: {Math.round(station.stability)}%
               </span>
               <span className="text-xs text-zinc-600 font-mono">
                 {Math.floor(station.timeLeft / 60)}:{(station.timeLeft % 60).toString().padStart(2, '0')}
@@ -79,9 +122,9 @@ export default function TestStationDetailPage() {
         ))}
       </div>
 
-      {selectedStation && (
+      {currentStation && (
         <StationDetail
-          station={selectedStation}
+          station={currentStation}
           onClose={() => setSelectedStation(null)}
           onFuel={handleFuel}
           onInject={handleInject}

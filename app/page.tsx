@@ -147,8 +147,8 @@ Respond with a JSON object containing a "personas" array where each item has:
   const handleFuel = (id: string) => {
     setStations(prev => prev.map(s => {
       if (s.id === id) {
-        const newTime = Math.min(s.timeLeft + 300, 300); // Add 5 mins, cap at 5 mins
-        return { ...s, timeLeft: newTime, stability: (newTime / 300) * 100, status: 'active' };
+        const newTime = s.timeLeft + 300; // Add 5 mins (cumulative, no cap)
+        return { ...s, timeLeft: newTime, stability: Math.min((newTime / 300) * 100, 100), status: 'active' };
       }
       return s;
     }));
