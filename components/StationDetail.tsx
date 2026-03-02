@@ -4,9 +4,10 @@ import { useState, useEffect } from 'react';
 import { Station } from '@/app/page';
 import { motion } from 'motion/react';
 import Image from 'next/image';
-import { X, BatteryCharging, MessageSquare, Phone, Radio, Activity, Volume2, VolumeX, Play } from 'lucide-react';
+import { X, BatteryCharging, MessageSquare, Phone, Radio, Volume2, VolumeX, Play, Mic, MicOff, PhoneOff } from 'lucide-react';
 import { useBroadcast } from '@/hooks/use-broadcast';
 import { PaymentModal, PaymentAction } from './PaymentModal';
+import { useCallMode } from '@/hooks/use-call-mode';
 
 interface StationDetailProps {
   station: Station;
@@ -18,7 +19,6 @@ interface StationDetailProps {
 export function StationDetail({ station, onClose, onFuel, onInject }: StationDetailProps) {
   const [injectMessage, setInjectMessage] = useState('');
   const [isInjecting, setIsInjecting] = useState(false);
-  const [isCalling, setIsCalling] = useState(false);
   const [paymentAction, setPaymentAction] = useState<PaymentAction | null>(null);
   const [pendingInjectMessage, setPendingInjectMessage] = useState('');
   const [waveformData] = useState(() => 
@@ -36,6 +36,25 @@ export function StationDetail({ station, onClose, onFuel, onInject }: StationDet
     lore: station.lore,
     autoPlay: !isStatic,
   });
+
+  // Call mode hook
+  const callerName = typeof window !== 'undefined' 
+    ? localStorage.getItem('frequency-zero-user-name') || 'Anonymous'
+    : 'Anonymous';
+    
+  const callMode = useCallMode({
+    agentName: station.agentName,
+    lore: station.lore,
+    callerName,
+    onCallEnd: () => {
+      // Resume broadcast after call ends
+      if (!isStatic) {
+        broadcast.play();
+      }
+    },
+  });
+
+  const isInCall = callMode.callState === 'active' || callMode.callState === 'requesting-permission';
 
   // Cleanup broadcast on close
   useEffect(() => {
@@ -67,8 +86,11 @@ export function StationDetail({ station, onClose, onFuel, onInject }: StationDet
     setPaymentAction('call');
   };
 
-  const handleClaimClick = () => {
-    setPaymentAction('claim');
+  const handleShareClick = () => {
+    const tweetText = `Tuning into ${station.agentName} on Frequency Zero 📻\n\nJoin the underground broadcast:`;
+    const shareUrl = typeof window !== 'undefined' ? window.location.href : '';
+    const twitterUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(tweetText)}&url=${encodeURIComponent(shareUrl)}`;
+    window.open(twitterUrl, '_blank', 'noopener,noreferrer');
   };
 
   const handlePaymentConfirm = () => {
@@ -88,12 +110,9 @@ export function StationDetail({ station, onClose, onFuel, onInject }: StationDet
         setPendingInjectMessage('');
       }, 1500);
     } else if (paymentAction === 'call') {
-      setIsCalling(true);
-      setTimeout(() => {
-        setIsCalling(false);
-      }, 5000);
-    } else if (paymentAction === 'claim') {
-      // Handle claim action
+      // Pause broadcast and start call mode
+      broadcast.pause();
+      callMode.startCall();
     }
     setPaymentAction(null);
   };
@@ -101,6 +120,12 @@ export function StationDetail({ station, onClose, onFuel, onInject }: StationDet
   const handlePaymentCancel = () => {
     setPaymentAction(null);
     setPendingInjectMessage('');
+  };
+
+  const formatCallTime = (seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m}:${s.toString().padStart(2, '0')}`;
   };
 
   return (
@@ -117,9 +142,15 @@ export function StationDetail({ station, onClose, onFuel, onInject }: StationDet
           <div className="flex items-center gap-3">
             <div className={`w-2 h-2 rounded-full ${isStatic ? 'bg-zinc-600' : 'bg-red-500 animate-pulse'}`}></div>
             <span className="font-mono text-xs tracking-widest uppercase text-zinc-300">
-              {isStatic ? 'SIGNAL LOST' : broadcast.isLoading ? 'BUFFERING...' : 'LIVE FEED'}
+              {isStatic ? 'SIGNAL LOST' : isInCall ? 'LIVE CALL' : broadcast.isLoading ? 'BUFFERING...' : 'LIVE FEED'}
             </span>
-            {broadcast.pendingInjections > 0 && (
+            {isInCall && callMode.callState === 'active' && (
+              <span className="ml-2 px-2 py-1 bg-red-500/20 border border-red-500/50 rounded text-[10px] font-mono text-red-400 uppercase tracking-wider animate-pulse flex items-center gap-1">
+                <Phone className="w-3 h-3" />
+                {callerName} • {formatCallTime(callMode.timeLeft)}
+              </span>
+            )}
+            {!isInCall && broadcast.pendingInjections > 0 && (
               <span className="ml-2 px-2 py-0.5 bg-amber-500/20 border border-amber-500/50 rounded text-[10px] font-mono text-amber-400 uppercase tracking-wider animate-pulse">
                 {broadcast.pendingInjections} pending
               </span>
@@ -150,7 +181,7 @@ export function StationDetail({ station, onClose, onFuel, onInject }: StationDet
         </div>
 
         {/* Broadcast Error/Click to Play */}
-        {!isStatic && broadcast.error && (
+        {!isStatic && broadcast.error && !isInCall && (
           <button
             onClick={() => broadcast.play()}
             className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-30 bg-black/80 border border-red-500/50 rounded-xl px-6 py-4 flex flex-col items-center gap-2 hover:bg-red-900/20 transition-colors"
@@ -158,6 +189,109 @@ export function StationDetail({ station, onClose, onFuel, onInject }: StationDet
             <Play className="w-8 h-8 text-red-500" />
             <span className="font-mono text-xs text-red-400 uppercase tracking-widest">{broadcast.error}</span>
           </button>
+        )}
+
+        {/* Floating Mic Button - Active Call */}
+        {callMode.callState === 'active' && (
+          <div className="absolute bottom-32 left-1/2 -translate-x-1/2 z-40 flex flex-col items-center gap-3">
+            {/* Audio Waveform when host is speaking */}
+            {callMode.isSpeaking && (
+              <div className="flex items-center justify-center gap-1 h-8 mb-2">
+                {[...Array(12)].map((_, i) => (
+                  <motion.div
+                    key={i}
+                    className="w-1 bg-red-500 rounded-full"
+                    animate={{
+                      height: [`${15 + Math.random() * 20}px`, `${25 + Math.random() * 30}px`, `${15 + Math.random() * 20}px`]
+                    }}
+                    transition={{
+                      duration: 0.4 + Math.random() * 0.3,
+                      repeat: Infinity,
+                      ease: 'easeInOut',
+                      delay: i * 0.05,
+                    }}
+                  />
+                ))}
+              </div>
+            )}
+
+            {/* Status */}
+            <button
+              onClick={callMode.error ? callMode.retryPlay : undefined}
+              disabled={!callMode.error}
+              className={`px-4 py-2 rounded-full border transition-all ${
+              callMode.isSpeaking 
+                ? 'bg-red-500/20 border-red-500/50' 
+                : callMode.isProcessing 
+                  ? 'bg-amber-500/20 border-amber-500/50'
+                  : callMode.error
+                    ? 'bg-red-900/30 border-red-500/50 cursor-pointer hover:bg-red-900/50'
+                    : 'bg-black/80 border-zinc-700 cursor-default'
+            }`}>
+              <span className={`font-mono text-xs uppercase tracking-wider ${
+                callMode.isSpeaking ? 'text-red-400' : callMode.isProcessing ? 'text-amber-400' : callMode.error ? 'text-red-400' : 'text-zinc-400'
+              }`}>
+                {callMode.error 
+                  ? '🔊 Tap to play audio'
+                  : callMode.isSpeaking 
+                    ? '🔊 Host Speaking...' 
+                    : callMode.isProcessing 
+                      ? '⏳ Processing...' 
+                      : callMode.isListening 
+                        ? '🎤 Speak now • Tap to send' 
+                        : 'Tap mic to speak'}
+              </span>
+            </button>
+            
+            {/* Mic Button */}
+            <button
+              onClick={callMode.toggleListening}
+              disabled={callMode.isSpeaking || callMode.isProcessing}
+              className={`w-16 h-16 rounded-full flex items-center justify-center transition-all shadow-lg ${
+                callMode.isListening 
+                  ? 'bg-red-500 animate-pulse scale-110' 
+                  : callMode.isSpeaking
+                    ? 'bg-red-900/50 cursor-not-allowed'
+                  : callMode.isProcessing
+                    ? 'bg-amber-900/50 cursor-not-allowed'
+                    : 'bg-zinc-800 hover:bg-zinc-700 hover:scale-105'
+              }`}
+            >
+              {callMode.isListening ? (
+                <Mic className="w-7 h-7 text-white" />
+              ) : callMode.isSpeaking ? (
+                <Volume2 className="w-7 h-7 text-red-400 animate-pulse" />
+              ) : (
+                <MicOff className="w-7 h-7 text-zinc-400" />
+              )}
+            </button>
+
+            {/* End Call Button */}
+            <button
+              onClick={callMode.endCall}
+              className="flex items-center gap-2 px-4 py-2 bg-black/80 hover:bg-red-500/20 border border-zinc-700 rounded-full transition-colors group"
+            >
+              <PhoneOff className="w-3 h-3 text-red-500" />
+              <span className="font-mono text-[10px] text-zinc-400 group-hover:text-red-400 tracking-widest uppercase">
+                End Call
+              </span>
+            </button>
+          </div>
+        )}
+
+        {/* Requesting Permission Overlay */}
+        {callMode.callState === 'requesting-permission' && (
+          <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/80 backdrop-blur-sm">
+            <div className="flex flex-col items-center gap-4">
+              <div className="w-16 h-16 rounded-full bg-red-500/20 border border-red-500/50 flex items-center justify-center animate-pulse">
+                <Mic className="w-8 h-8 text-red-500" />
+              </div>
+              <p className="font-mono text-sm text-zinc-400">Requesting microphone access...</p>
+              {callMode.error && (
+                <p className="font-mono text-xs text-red-400">{callMode.error}</p>
+              )}
+            </div>
+          </div>
         )}
 
         {/* Main Visual */}
@@ -273,16 +407,16 @@ export function StationDetail({ station, onClose, onFuel, onInject }: StationDet
           {/* Call Button */}
           <button 
             onClick={handleCallClick}
-            disabled={isStatic || isCalling}
-            className={`w-full flex items-center justify-between p-4 border rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed ${isCalling ? 'bg-red-900/20 border-red-500/50' : 'bg-zinc-900 hover:bg-zinc-800 border-zinc-800'}`}
+            disabled={isStatic || isInCall}
+            className={`w-full flex items-center justify-between p-4 border rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed ${isInCall ? 'bg-red-900/20 border-red-500/50' : 'bg-zinc-900 hover:bg-zinc-800 border-zinc-800'}`}
           >
             <div className="flex items-center gap-3">
-              <div className={`p-2 rounded-lg transition-colors ${isCalling ? 'bg-red-500/20 animate-pulse' : 'bg-zinc-800'}`}>
-                <Phone className={`w-5 h-5 ${isCalling ? 'text-red-500' : 'text-zinc-400'}`} />
+              <div className={`p-2 rounded-lg transition-colors ${isInCall ? 'bg-red-500/20 animate-pulse' : 'bg-zinc-800'}`}>
+                <Phone className={`w-5 h-5 ${isInCall ? 'text-red-500' : 'text-zinc-400'}`} />
               </div>
               <div className="text-left">
                 <div className="font-mono text-sm font-bold text-zinc-100 tracking-widest uppercase">
-                  {isCalling ? 'CONNECTING...' : '[ CALL ]'}
+                  {isInCall ? 'ON AIR' : '[ CALL ]'}
                 </div>
                 <div className="text-xs text-zinc-500 font-sans">Patch into live broadcast</div>
               </div>
@@ -290,34 +424,15 @@ export function StationDetail({ station, onClose, onFuel, onInject }: StationDet
             <div className="font-mono text-sm text-zinc-400 border border-zinc-800 px-3 py-1 rounded-md bg-zinc-950">$250</div>
           </button>
 
-          {/* Claim Button */}
+          {/* Share Button */}
           <button 
-            onClick={handleClaimClick}
-            disabled={isStatic}
-            className="w-full py-4 mt-2 bg-transparent border border-zinc-800 hover:border-zinc-600 text-zinc-400 hover:text-zinc-200 font-mono text-xs font-bold tracking-widest uppercase rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            onClick={handleShareClick}
+            className="w-full py-4 mt-2 bg-transparent border border-zinc-800 hover:border-zinc-600 text-zinc-400 hover:text-zinc-200 font-mono text-xs font-bold tracking-widest uppercase rounded-xl transition-colors flex items-center justify-center gap-2"
           >
             <Radio className="w-4 h-4" />
-            Claim Frequency
+            Share Station
           </button>
         </div>
-        
-        {/* Calling Overlay */}
-        {isCalling && (
-          <div className="absolute inset-0 bg-black/90 z-50 flex flex-col items-center justify-center p-8 backdrop-blur-md">
-            <div className="w-24 h-24 rounded-full border border-red-500/30 flex items-center justify-center mb-8 relative">
-              <div className="absolute inset-0 rounded-full border border-red-500 animate-ping opacity-20"></div>
-              <Activity className="w-10 h-10 text-red-500 animate-pulse" />
-            </div>
-            <h3 className="font-mono text-2xl font-bold tracking-widest text-zinc-100 mb-2 uppercase">Connecting</h3>
-            <p className="text-zinc-500 font-mono text-sm text-center">Establishing secure voice channel to {station.agentName}...</p>
-            <button 
-              onClick={() => setIsCalling(false)}
-              className="mt-12 px-8 py-3 bg-red-900/20 border border-red-500/50 text-red-500 font-mono text-sm tracking-widest uppercase rounded-full hover:bg-red-900/40 transition-colors"
-            >
-              Abort
-            </button>
-          </div>
-        )}
       </div>
 
       {/* Payment Modal */}
